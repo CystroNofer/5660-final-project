@@ -1,3 +1,38 @@
+## Milestone 0
+
+I forgot to create a pull request for the design doc, but as the commit history may show, it was uploaded by the deadline.
+
+## Milestone 1
+  
+
+Changed the project target from Houdini HDA to a Unity project (Sections above changed accordingly)
+
+  
+
+Implemented the terrain, body of water, and cave generations
+
+- The finer details produced by multi-octave noises are not very visible with the blocky visual. Thus, the overall terrain shape uses one single noise. However, other features such as water and caves, uses their respective noises.
+
+- It turned out the cave generation is similar to the river generation. Thus, it is implemented this week. Week 3, while originally planned for the cave subsystem, will now be dedicated to underground structures.
+
+  
+## Milestone 2
+
+
+Completed village and dungeon generation. More building templates will be added next week. 
+
+It turned out that for most world seeds, if we were to completely avoid structures from overlapping with certain terrain features, the generation may take many attempts to find suitable locations and often fail eventually, resulting in sparse, incomplete-looking villages.
+
+Furthermore, there are rarely enough flat areas to generate each building.  
+
+Thus, building generator now tries its best to find suitable locations but are also allowed to hang buildings over slopes. Paths will different materials if overhung.
+
+The material is also updated.
+
+Next week, new materials and shadings will be added. Water will be changed to flood-fill, preventing it from floating unsupported. I also plan to add more block types for variation.
+
+
+  
 
   
 
@@ -7,11 +42,19 @@
 
   
 
+  
+
 > A “chunk” referes generally to one square-based area of some height, not Minecraft’s exact 16×16-block chunk size. The tile will be large enough to contain a village, dungeon, some body of water, and a cave.
+
+  
 
 >
 
+  
+
 > This project will not necessarily duplicate the blocky visual of Minecraft
+
+  
 
   
 
@@ -23,7 +66,11 @@
 
   
 
+  
+
 This project is motivated by the way *Minecraft* builds a large, coherent world from relatively simple procedural rules. Terrain shape, caves, rivers, structures, and biome-like regions are generated from a seed instead of being modeled by hand. The goal of this project is to reproduce that idea on a much smaller scale in Unity.
+
+  
 
   
 
@@ -35,7 +82,11 @@ The project will generate one complete terrain tile that visibly demonstrates se
 
   
 
+  
+
 ## Goal
+
+  
 
   
 
@@ -47,7 +98,11 @@ The goal is to create a Unity project/C# generator that generates a single Minec
 
   
 
+  
+
 Each generated tile should contain:
+
+  
 
   
 
@@ -57,13 +112,21 @@ Each generated tile should contain:
 
   
 
+  
+
 - One body of water (river or lake) at the surface of the terrain.
+
+  
 
   
 
 - One small procedurally assembled village.
 
-	- For the scope of this project, the design of the buildings in the village will not be procedual, only the placement of them.
+  
+
+- For the scope of this project, the design of the buildings in the village will not be procedual, only the placement of them.
+
+  
 
   
 
@@ -71,7 +134,11 @@ Each generated tile should contain:
 
   
 
+  
+
 - A cave (random carvings in a solid region) below the surface
+
+  
 
   
 
@@ -79,7 +146,11 @@ Each generated tile should contain:
 
   
 
+  
+
 - Exposed generator controls for important parameters such as seed, terrain scale, village size, etc.
+
+  
 
   
 
@@ -91,7 +162,11 @@ The final result should be deterministic: using the same seed and parameters sho
 
   
 
+  
+
 ## Inspiration/reference
+
+  
 
   
 
@@ -103,7 +178,11 @@ The primary visual and technical inspiration is *Minecraft* world generation. Mi
 
   
 
+  
+
 ### Minecraft world generation
+
+  
 
   
 
@@ -115,7 +194,11 @@ Microsoft’s Minecraft Creator documentation gives a high-level description of 
 
   
 
+  
+
 - [Minecraft World Generation Overview — Microsoft Learn](https://learn.microsoft.com/en-us/minecraft/creator/documents/world-generation?view=minecraft-bedrock-stable)
+
+  
 
   
 
@@ -127,7 +210,11 @@ Reference image — village, terrain, and river:
 
   
 
+  
+
 ![Minecraft terrain reference](https://i.pinimg.com/736x/76/59/10/765910a4dea141eed46f7b672f6ecffb.jpg)
+
+  
 
   
 
@@ -139,7 +226,11 @@ Reference image — village, terrain, and river:
 
   
 
+  
+
 Minecraft villages are assembled from pools of structure pieces rather than being one fixed model. The Java Edition jigsaw system randomly selects compatible structure templates and connects them while checking whether pieces can be placed.
+
+  
 
   
 
@@ -149,7 +240,11 @@ Minecraft villages are assembled from pools of structure pieces rather than bein
 
   
 
+  
+
 - [Village — Minecraft Wiki](https://minecraft.wiki/w/Village)
+
+  
 
   
 
@@ -161,7 +256,11 @@ This project will use a simplified version of the same idea. a small library of 
 
   
 
+  
+
 ### Minecraft cave generation
+
+  
 
   
 
@@ -173,11 +272,17 @@ Modern Minecraft uses 3D noise as part of cave generation. Noise parameters cont
 
   
 
+  
+
 - [Noise Settings — Minecraft Wiki](https://minecraft.wiki/w/Noise_settings)
 
   
 
+  
+
 - [Cave Generation — Minecraft Wiki](https://minecraft.wiki/w/Cavern)
+
+  
 
   
 
@@ -189,7 +294,11 @@ Modern Minecraft uses 3D noise as part of cave generation. Noise parameters cont
 
   
 
+  
+
 ## Specification
+
+  
 
   
 
@@ -201,7 +310,11 @@ Modern Minecraft uses 3D noise as part of cave generation. Noise parameters cont
 
   
 
+  
+
 The system will create one square terrain tile.
+
+  
 
   
 
@@ -210,9 +323,12 @@ The system will create one square terrain tile.
 The terrain will combine one or multiple scales of noise. This depends on how much the blocky visual preserves the detailed noises.
 
   
+
   
 
 The overall dimensions and height range will be parameterized.
+
+  
 
   
 
@@ -224,7 +340,11 @@ The overall dimensions and height range will be parameterized.
 
   
 
+  
+
 A body of water, likely a river, will be included.
+
+  
 
   
 
@@ -236,7 +356,11 @@ The river system will:
 
   
 
+  
+
 - Generate an area over the terrain.
+
+  
 
   
 
@@ -244,11 +368,17 @@ The river system will:
 
   
 
+  
+
 - Add a water surface at a controlled water level.
 
   
 
+  
+
 - Prevent village buildings from spawning directly inside the river.
+
+  
 
   
 
@@ -260,7 +390,11 @@ The river will not necessarily be animated
 
   
 
+  
+
 ### 3. Village
+
+  
 
   
 
@@ -272,7 +406,11 @@ One village will be generated on a relatively flat area near the surface.
 
   
 
+  
+
 The village will contain approximately:
+
+  
 
   
 
@@ -282,7 +420,11 @@ The village will contain approximately:
 
   
 
+  
+
 - One or more farms.
+
+  
 
   
 
@@ -290,7 +432,11 @@ The village will contain approximately:
 
   
 
+  
+
 - Paths connecting buildings.
+
+  
 
   
 
@@ -302,7 +448,11 @@ The village generator will:
 
   
 
+  
+
 1. Find terrain that is sufficiently flat and above water level.
+
+  
 
   
 
@@ -310,7 +460,11 @@ The village generator will:
 
   
 
+  
+
 3. Generate candidate building positions around the center.
+
+  
 
   
 
@@ -318,7 +472,11 @@ The village generator will:
 
   
 
+  
+
 5. Randomly select building modules from a template pool.
+
+  
 
   
 
@@ -326,7 +484,11 @@ The village generator will:
 
   
 
+  
+
 7. Project buildings to the terrain height.
+
+  
 
   
 
@@ -338,7 +500,11 @@ The village generator will:
 
   
 
+  
+
 One underground dungeon will be generated in the underground layer (about layer 60 to 80).
+
+  
 
   
 
@@ -350,7 +516,11 @@ The dungeon will contain serveral rooms. Each room will have further details in 
 
   
 
+  
+
 A seeded random walk or simple room graph will select and connect modules. Collision checks will prevent rooms from overlapping incorrectly.
+
+  
 
   
 
@@ -362,11 +532,17 @@ A seeded random walk or simple room graph will select and connect modules. Colli
 
   
 
+  
+
 The lower terrain will contain procedural caves (around layer 0 to 60) generated with 3D noise and/or volumetric geometry.
 
   
 
+  
+
 ### 7. Seed and controls
+
+  
 
   
 
@@ -378,7 +554,11 @@ The final generator should expose at least:
 
   
 
+  
+
 -  `Seed`
+
+  
 
   
 
@@ -386,7 +566,11 @@ The final generator should expose at least:
 
   
 
+  
+
 -  `Water Level`
+
+  
 
   
 
@@ -394,7 +578,11 @@ The final generator should expose at least:
 
   
 
+  
+
 -  `Cave Height`
+
+  
 
   
 
@@ -406,7 +594,11 @@ Changing the seed should produce a visibly different but structurally valid tile
 
   
 
+  
+
 ## Techniques
+
+  
 
   
 
@@ -418,11 +610,17 @@ Changing the seed should produce a visibly different but structurally valid tile
 
   
 
+  
+
 Seeded noise will provide large-scale randomness without the discontinuities of independent random values. Multiple octaves/scales will be layered to produce both large terrain forms and smaller detail. Different applications of the noises could also produce different features over the terrain
 
   
 
+  
+
 ### Bounding boxes and collision tests
+
+  
 
   
 
@@ -434,7 +632,11 @@ Building and dungeon modules will use bounding boxes to test whether new pieces 
 
   
 
+  
+
 ### Volumetric cave carving
+
+  
 
   
 
@@ -446,14 +648,18 @@ Caves require overhangs and enclosed spaces, so a heightfield alone is not suffi
 
   
 
+  
+
 A 3D noise field can be thresholded into cave-shaped regions and subtracted from a solid terrain volume.
 
   
+
   
 
 ## Design
 
   
+
   
 
   
@@ -462,7 +668,11 @@ A 3D noise field can be thresholded into cave-shaped regions and subtracted from
 
   
 
+  
+
 flowchart TD
+
+  
 
   
 
@@ -472,7 +682,11 @@ A[Master Seed & Generator Parameters]
 
   
 
+  
+
 A --> C[Terrain Noise]
+
+  
 
   
 
@@ -482,11 +696,17 @@ C --> D[Terrain Features]
 
   
 
+  
+
 D --> E[River Path Generator]
 
   
 
+  
+
 E --> F[Terrain Carving]
+
+  
 
   
 
@@ -496,7 +716,11 @@ F --> G[Water Surface]
 
   
 
+  
+
 D --> H[Village Placement Mask]
+
+  
 
   
 
@@ -504,7 +728,11 @@ F --> H
 
   
 
+  
+
 H --> I[Village Center + Roads]
+
+  
 
   
 
@@ -514,11 +742,17 @@ I --> J[Building Template Placement]
 
   
 
+  
+
 C --> K[Underground Features]
 
   
 
+  
+
 K --> L[3D Cave Noise]
+
+  
 
   
 
@@ -528,11 +762,17 @@ L --> N[Dungeon Placement]
 
   
 
+  
+
 G --> S[Final Terrain Assembly]
 
   
 
+  
+
 J --> S
+
+  
 
   
 
@@ -542,7 +782,11 @@ N --> S
 
   
 
+  
+
 S --> T[Materials / Block-like Shading]
+
+  
 
   
 
@@ -550,7 +794,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 ```
+
+  
 
   
 
@@ -562,7 +810,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 ### Week 1 — Terrain and river foundation
+
+  
 
   
 
@@ -572,7 +824,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Generate the base terrain shapes.
+
+  
 
   
 
@@ -580,7 +836,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Build the first procedural river curve.
+
+  
 
   
 
@@ -588,11 +848,17 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Add the water surface.
 
   
 
+  
+
 - Confirm that changing the seed produces stable, repeatable terrain.
+
+  
 
   
 
@@ -604,9 +870,12 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 ### Week 2 — Village generation
 
   
+
   
 
   
@@ -615,7 +884,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Create building footprints/bounding boxes.
+
+  
 
   
 
@@ -623,7 +896,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Select a village center.
+
+  
 
   
 
@@ -631,7 +908,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Reject buildings that collide with the river, steep slopes, or other buildings.
+
+  
 
   
 
@@ -639,7 +920,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Generate simple village paths.
+
+  
 
   
 
@@ -651,7 +936,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 ### Week 3 — Caves and dungeon
+
+  
 
   
 
@@ -661,7 +950,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Implement 3D noise caves.
+
+  
 
   
 
@@ -669,7 +962,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Create the modular dungeon room library.
+
+  
 
   
 
@@ -677,15 +974,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Prevent major dungeon self-intersections.
 
   
-
-- Create the depth-based Nether region.
-
-  
-
-- Add lava pools/channels and basic Nether-style materials.
 
   
 
@@ -697,9 +990,12 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 ### Week 4 — Integration, polish, and presentation
 
   
+
   
 
   
@@ -708,7 +1004,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Fix dependencies between river, village, dungeon, and cave generation.
+
+  
 
   
 
@@ -716,7 +1016,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Test several seeds and identify failure cases.
+
+  
 
   
 
@@ -724,7 +1028,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Add optional props if time remains.
+
+  
 
   
 
@@ -732,7 +1040,11 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 - Create final screenshots and/or turntable.
+
+  
 
   
 
@@ -742,16 +1054,6 @@ T --> U[Final HDA Output]
 
   
 
+  
+
 **Milestone 3:** A stable final Unity asset package that can generate multiple visually distinct terrain tiles from different seeds.
-
-## Milestone 1
-
-Changed the project target from Houdini HDA to a Unity project (Sections above changed accordingly)
-
-Implemented the terrain, body of water, and cave generations
- - The finer details produced by multi-octave noises are not very visible with the blocky visual. Thus, the overall terrain shape uses one single noise. However, other features such as water and caves, uses their respective noises. 
- - It turned out the cave generation is similar to the river generation. Thus, it is implemented this week. Week 3, while originally planned for the cave subsystem, will now be dedicated to underground structures.
-
-### Note on Submission
-
-I forgot to create a pull request for the design doc, but as the commit history shows, it was uploaded by the deadline. 

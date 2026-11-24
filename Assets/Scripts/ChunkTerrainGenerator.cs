@@ -16,7 +16,10 @@ public enum BlockType
     Dirt,
     Grass,
     Stone,
-    WoodPlank
+    WoodPlank,
+    Path,
+    StoneBrick,
+    MossyStoneBrick
 }
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -26,12 +29,15 @@ public class ChunkTerrainGenerator : MonoBehaviour
     [SerializeField] private int ChunkWidth = 50;
     private const int ChunkHeight = 200;
     private const int AtlasColumns = 3;
-    private const int AtlasRows = 2;
+    private const int AtlasRows = 3;
     private const float AtlasTileInset = 0.001f;
     private const int DungeonRoomWidth = 9;
     private const int DungeonRoomHeight = 5;
     private const int DungeonCorridorWidth = 3;
+    private const int DungeonCorridorHeight = 3;
     private const int DungeonRoomSeparation = 2;
+    private const int VillageRoadWidth = 3;
+    private const int VillageFoundationDepth = 3;
 
     [Header("Terrain Noise")]
     [SerializeField] private int seed;
@@ -67,6 +73,13 @@ public class ChunkTerrainGenerator : MonoBehaviour
     [SerializeField] private bool generateDungeon = true;
     [SerializeField, Min(1)] private int dungeonRoomCount = 8;
     [SerializeField, Min(0)] private int dungeonFloorY = 40;
+    [SerializeField, Range(0.0f, 1.0f)] private float dungeonMossBrickChance = 0.15f;
+
+    [Header("Village")]
+    [SerializeField] private bool generateVillage = true;
+    [SerializeField, Range(1, 8)] private int villageBuildingCount = 6;
+    [SerializeField, Min(1)] private int villageCandidateCount = 24;
+    [SerializeField, Min(0)] private int villageBuildingSpacing = 2;
 
     [Header("Water")]
     [SerializeField] private GameObject waterPrefab;
@@ -129,16 +142,28 @@ public class ChunkTerrainGenerator : MonoBehaviour
     private static readonly Vector2Int[,] AtlasTiles =
     {
         {
-            new Vector2Int(0, 1), new Vector2Int(0, 1), new Vector2Int(0, 1),
-            new Vector2Int(0, 1), new Vector2Int(0, 1), new Vector2Int(0, 1)
+            new Vector2Int(1, 2), new Vector2Int(1, 2), new Vector2Int(1, 2),
+            new Vector2Int(1, 2), new Vector2Int(1, 2), new Vector2Int(1, 2)
         },
         {
-            new Vector2Int(0, 1), new Vector2Int(0, 1), new Vector2Int(0, 1),
-            new Vector2Int(0, 1), new Vector2Int(0, 1), new Vector2Int(0, 1)
+            new Vector2Int(1, 2), new Vector2Int(1, 2), new Vector2Int(1, 2),
+            new Vector2Int(1, 2), new Vector2Int(1, 2), new Vector2Int(1, 2)
         },
         {
-            new Vector2Int(0, 0), new Vector2Int(0, 0), new Vector2Int(2, 1),
-            new Vector2Int(1, 1), new Vector2Int(0, 0), new Vector2Int(0, 0)
+            new Vector2Int(2, 2), new Vector2Int(2, 2), new Vector2Int(1, 2),
+            new Vector2Int(0, 1), new Vector2Int(2, 2), new Vector2Int(2, 2)
+        },
+        {
+            new Vector2Int(0, 2), new Vector2Int(0, 2), new Vector2Int(0, 2),
+            new Vector2Int(0, 2), new Vector2Int(0, 2), new Vector2Int(0, 2)
+        },
+        {
+            new Vector2Int(0, 0), new Vector2Int(0, 0), new Vector2Int(0, 0),
+            new Vector2Int(0, 0), new Vector2Int(0, 0), new Vector2Int(0, 0)
+        },
+        {
+            new Vector2Int(1, 1), new Vector2Int(1, 1), new Vector2Int(1, 2),
+            new Vector2Int(2, 1), new Vector2Int(1, 1), new Vector2Int(1, 1)
         },
         {
             new Vector2Int(1, 0), new Vector2Int(1, 0), new Vector2Int(1, 0),
@@ -150,6 +175,9 @@ public class ChunkTerrainGenerator : MonoBehaviour
         }
     };
 
+    private static readonly VillageBuildingTemplate VillageHouseTemplate =
+        VillageBuildingTemplates.PlankHouse;
+
     private void Start()
     {
         GenerateChunk();
@@ -159,6 +187,7 @@ public class ChunkTerrainGenerator : MonoBehaviour
     {
         BlockType[,,] blocks = new BlockType[ChunkWidth, ChunkHeight, ChunkWidth];
         int[,] surfaceHeights = new int[ChunkWidth, ChunkWidth];
+        float[,] riverInfluences = new float[ChunkWidth, ChunkWidth];
         System.Random seedRandom = new System.Random(seed);
         float noiseOffsetX = seedRandom.Next(-100000, 100001);
         float noiseOffsetZ = seedRandom.Next(-100000, 100001);
@@ -228,6 +257,7 @@ public class ChunkTerrainGenerator : MonoBehaviour
                     stoneHeight = Mathf.Min(stoneHeight, dirtHeight);
                 }
 
+                riverInfluences[x, z] = riverInfluence;
                 surfaceHeights[x, z] = dirtHeight;
 
                 for (int y = 0; y <= dirtHeight; y++)
@@ -240,10 +270,6 @@ public class ChunkTerrainGenerator : MonoBehaviour
                     blocks[x, dirtHeight, z] = BlockType.Dirt;
                 }
 
-                if (dirtHeight >= waterHeight)
-                {
-                    blocks[x, dirtHeight, z] = BlockType.Grass;
-                }
             }
         }
 
@@ -337,10 +363,13 @@ public class ChunkTerrainGenerator : MonoBehaviour
             int clampedDungeonFloorY = Mathf.Clamp(
                 dungeonFloorY,
                 0,
-                ChunkHeight - DungeonRoomHeight - 1
+                ChunkHeight - DungeonRoomHeight - 2
             );
             int dungeonSeed = unchecked(seed * 1664525 + 1013904223);
             System.Random dungeonRandom = new System.Random(dungeonSeed);
+            System.Random dungeonMossRandom = new System.Random(
+                unchecked(dungeonSeed + 1597334677)
+            );
             List<BoundsInt> dungeonRooms = new List<BoundsInt>();
             int placementAttempts = 0;
             int maximumPlacementAttempts = dungeonRoomCount * 50;
@@ -421,24 +450,13 @@ public class ChunkTerrainGenerator : MonoBehaviour
 
             for (int roomIndex = 0; roomIndex < dungeonRooms.Count; roomIndex++)
             {
-                BoundsInt room = dungeonRooms[roomIndex];
-                int roomStartX = Mathf.Max(0, room.xMin);
-                int roomEndX = Mathf.Min(ChunkWidth, room.xMax);
-                int roomStartY = Mathf.Max(0, room.yMin);
-                int roomEndY = Mathf.Min(ChunkHeight, room.yMax);
-                int roomStartZ = Mathf.Max(0, room.zMin);
-                int roomEndZ = Mathf.Min(ChunkWidth, room.zMax);
-
-                for (int x = roomStartX; x < roomEndX; x++)
-                {
-                    for (int y = roomStartY; y < roomEndY; y++)
-                    {
-                        for (int z = roomStartZ; z < roomEndZ; z++)
-                        {
-                            blocks[x, y, z] = BlockType.Air;
-                        }
-                    }
-                }
+                BuildDungeonRoom(
+                    blocks,
+                    dungeonRooms[roomIndex],
+                    clampedDungeonFloorY,
+                    dungeonMossRandom,
+                    dungeonMossBrickChance
+                );
             }
 
             if (dungeonRooms.Count > 1)
@@ -525,8 +543,400 @@ public class ChunkTerrainGenerator : MonoBehaviour
                         corner = new Vector3Int(start.x, clampedDungeonFloorY, end.z);
                     }
 
-                    CarveDungeonCorridor(blocks, start, corner);
-                    CarveDungeonCorridor(blocks, corner, end);
+                    CarveDungeonCorridor(
+                        blocks,
+                        start,
+                        corner,
+                        dungeonRooms,
+                        dungeonMossRandom,
+                        dungeonMossBrickChance
+                    );
+                    CarveDungeonCorridor(
+                        blocks,
+                        corner,
+                        end,
+                        dungeonRooms,
+                        dungeonMossRandom,
+                        dungeonMossBrickChance
+                    );
+                }
+            }
+        }
+
+        if (generateVillage)
+        {
+            int villageSeed = unchecked(seed * 22695477 + 1);
+            System.Random villageRandom = new System.Random(villageSeed);
+            int siteMargin = Mathf.Min(24, Mathf.Max(0, (ChunkWidth - 1) / 2));
+            int minimumSiteCoordinate = siteMargin;
+            int maximumSiteCoordinate = ChunkWidth - siteMargin;
+
+            if (maximumSiteCoordinate <= minimumSiteCoordinate)
+            {
+                minimumSiteCoordinate = 0;
+                maximumSiteCoordinate = ChunkWidth;
+            }
+
+            int villageSiteX = ChunkWidth / 2;
+            int villageSiteZ = ChunkWidth / 2;
+            float bestSiteScore = float.NegativeInfinity;
+
+            for (int candidateIndex = 0; candidateIndex < villageCandidateCount; candidateIndex++)
+            {
+                int candidateX = villageRandom.Next(minimumSiteCoordinate, maximumSiteCoordinate);
+                int candidateZ = villageRandom.Next(minimumSiteCoordinate, maximumSiteCoordinate);
+                int sampleStartX = Mathf.Max(0, candidateX - 10);
+                int sampleEndX = Mathf.Min(ChunkWidth, candidateX + 11);
+                int sampleStartZ = Mathf.Max(0, candidateZ - 10);
+                int sampleEndZ = Mathf.Min(ChunkWidth, candidateZ + 11);
+                int minimumHeight = int.MaxValue;
+                int maximumHeight = int.MinValue;
+                int underwaterColumns = 0;
+                float nearbyRiverInfluence = 0.0f;
+
+                for (int x = sampleStartX; x < sampleEndX; x++)
+                {
+                    for (int z = sampleStartZ; z < sampleEndZ; z++)
+                    {
+                        int columnHeight = surfaceHeights[x, z];
+                        minimumHeight = Mathf.Min(minimumHeight, columnHeight);
+                        maximumHeight = Mathf.Max(maximumHeight, columnHeight);
+                        if (columnHeight < waterHeight)
+                        {
+                            underwaterColumns++;
+                        }
+
+                        nearbyRiverInfluence = Mathf.Max(
+                            nearbyRiverInfluence,
+                            riverInfluences[x, z]
+                        );
+                    }
+                }
+
+                float siteScore =
+                    -(maximumHeight - minimumHeight) * 20.0f -
+                    underwaterColumns * 3.0f -
+                    riverInfluences[candidateX, candidateZ] * 100.0f +
+                    nearbyRiverInfluence * 5.0f;
+
+                if (siteScore > bestSiteScore)
+                {
+                    bestSiteScore = siteScore;
+                    villageSiteX = candidateX;
+                    villageSiteZ = candidateZ;
+                }
+            }
+
+            int roadHalfWidth = VillageRoadWidth / 2;
+            villageSiteX = Mathf.Clamp(
+                villageSiteX,
+                roadHalfWidth,
+                ChunkWidth - roadHalfWidth - 1
+            );
+            villageSiteZ = Mathf.Clamp(
+                villageSiteZ,
+                roadHalfWidth,
+                ChunkWidth - roadHalfWidth - 1
+            );
+            bool mainRoadAlongX = villageRandom.Next(0, 2) == 0;
+            Vector2Int villageCenter =
+                new Vector2Int(villageSiteX, villageSiteZ);
+            List<Vector2Int> buildingOrigins = new List<Vector2Int>();
+            List<Vector2Int> buildingServicePoints = new List<Vector2Int>();
+            List<int> buildingRotations = new List<int>();
+            List<VillageBuildingTemplate> buildingTemplates =
+                new List<VillageBuildingTemplate>();
+            List<BoundsInt> buildingFootprints = new List<BoundsInt>();
+            List<Vector2Int> branchRoadStarts = new List<Vector2Int>();
+            List<Vector2Int> branchRoadEnds = new List<Vector2Int>();
+            int branchSeparation =
+                VillageHouseTemplate.Depth + villageBuildingSpacing * 2;
+            int branchLength = branchSeparation;
+            int sideBuildingDistance =
+                roadHalfWidth +
+                villageBuildingSpacing +
+                (VillageHouseTemplate.Width + 1) / 2;
+            int centerMainCoordinate =
+                mainRoadAlongX ? villageCenter.x : villageCenter.y;
+            int firstBranchOffset = (branchSeparation + 1) / 2;
+            int firstMainDirection = villageRandom.Next(0, 2) == 0 ? -1 : 1;
+            int maximumBranchAttempts = Mathf.Max(4, villageBuildingCount * 4);
+
+            for (
+                int branchAttempt = 0;
+                branchAttempt < maximumBranchAttempts &&
+                buildingOrigins.Count < villageBuildingCount;
+                branchAttempt++
+            )
+            {
+                int mainDirection = branchAttempt % 2 == 0 ?
+                    firstMainDirection :
+                    -firstMainDirection;
+                int distanceRing = branchAttempt / 2;
+                int branchStation =
+                    centerMainCoordinate +
+                    mainDirection *
+                    (firstBranchOffset + distanceRing * branchSeparation);
+
+                if (
+                    branchStation < roadHalfWidth ||
+                    branchStation >= ChunkWidth - roadHalfWidth
+                )
+                {
+                    continue;
+                }
+
+                int firstBranchSide =
+                    villageRandom.Next(0, 2) == 0 ? -1 : 1;
+
+                for (
+                    int branchSideAttempt = 0;
+                    branchSideAttempt < 2;
+                    branchSideAttempt++
+                )
+                {
+                    int branchSide = branchSideAttempt == 0 ?
+                        firstBranchSide :
+                        -firstBranchSide;
+                    Vector2Int roadStart;
+                    Vector2Int branchDirection;
+                    Vector2Int mainPositiveDirection;
+
+                    if (mainRoadAlongX)
+                    {
+                        roadStart = new Vector2Int(
+                            branchStation,
+                            villageCenter.y
+                        );
+                        branchDirection = branchSide > 0 ?
+                            Vector2Int.up :
+                            Vector2Int.down;
+                        mainPositiveDirection = Vector2Int.right;
+                    }
+                    else
+                    {
+                        roadStart = new Vector2Int(
+                            villageCenter.x,
+                            branchStation
+                        );
+                        branchDirection = branchSide > 0 ?
+                            Vector2Int.right :
+                            Vector2Int.left;
+                        mainPositiveDirection = Vector2Int.up;
+                    }
+
+                    Vector2Int roadEnd =
+                        roadStart + branchDirection * branchLength;
+                    int buildingsBeforeBranch = buildingOrigins.Count;
+
+                    TryPlanVillageBuilding(
+                        roadEnd,
+                        -branchDirection,
+                        VillageHouseTemplate,
+                        ChunkWidth,
+                        villageBuildingSpacing,
+                        surfaceHeights,
+                        riverInfluences,
+                        waterHeight,
+                        buildingOrigins,
+                        buildingServicePoints,
+                        buildingRotations,
+                        buildingTemplates,
+                        buildingFootprints
+                    );
+
+                    if (buildingOrigins.Count < villageBuildingCount)
+                    {
+                        Vector2Int sideServicePoint =
+                            roadStart +
+                            branchDirection * sideBuildingDistance;
+                        Vector2Int firstSideDirection =
+                            villageRandom.Next(0, 2) == 0 ?
+                            mainPositiveDirection :
+                            -mainPositiveDirection;
+                        bool placedSideBuilding = TryPlanVillageBuilding(
+                            sideServicePoint,
+                            -firstSideDirection,
+                            VillageHouseTemplate,
+                            ChunkWidth,
+                            villageBuildingSpacing,
+                            surfaceHeights,
+                            riverInfluences,
+                            waterHeight,
+                            buildingOrigins,
+                            buildingServicePoints,
+                            buildingRotations,
+                            buildingTemplates,
+                            buildingFootprints
+                        );
+
+                        if (!placedSideBuilding)
+                        {
+                            TryPlanVillageBuilding(
+                                sideServicePoint,
+                                firstSideDirection,
+                                VillageHouseTemplate,
+                                ChunkWidth,
+                                villageBuildingSpacing,
+                                surfaceHeights,
+                                riverInfluences,
+                                waterHeight,
+                                buildingOrigins,
+                                buildingServicePoints,
+                                buildingRotations,
+                                buildingTemplates,
+                                buildingFootprints
+                            );
+                        }
+                    }
+
+                    if (buildingOrigins.Count > buildingsBeforeBranch)
+                    {
+                        branchRoadStarts.Add(roadStart);
+                        branchRoadEnds.Add(roadEnd);
+                        break;
+                    }
+                }
+            }
+
+            int buildingsToPlace = buildingOrigins.Count;
+            List<int> buildingTargetYs = new List<int>();
+
+            if (buildingsToPlace > 0)
+            {
+                int minimumMainCoordinate = centerMainCoordinate;
+                int maximumMainCoordinate = centerMainCoordinate;
+
+                for (
+                    int branchIndex = 0;
+                    branchIndex < branchRoadStarts.Count;
+                    branchIndex++
+                )
+                {
+                    int branchCoordinate = mainRoadAlongX ?
+                        branchRoadStarts[branchIndex].x :
+                        branchRoadStarts[branchIndex].y;
+                    minimumMainCoordinate = Mathf.Min(
+                        minimumMainCoordinate,
+                        branchCoordinate
+                    );
+                    maximumMainCoordinate = Mathf.Max(
+                        maximumMainCoordinate,
+                        branchCoordinate
+                    );
+                }
+
+                Vector2Int mainRoadStart = mainRoadAlongX ?
+                    new Vector2Int(minimumMainCoordinate, villageCenter.y) :
+                    new Vector2Int(villageCenter.x, minimumMainCoordinate);
+                Vector2Int mainRoadEnd = mainRoadAlongX ?
+                    new Vector2Int(maximumMainCoordinate, villageCenter.y) :
+                    new Vector2Int(villageCenter.x, maximumMainCoordinate);
+                Dictionary<Vector2Int, int> villageRoadHeights =
+                    new Dictionary<Vector2Int, int>();
+
+                TerraformVillageRoad(
+                    blocks,
+                    surfaceHeights,
+                    riverInfluences,
+                    mainRoadStart,
+                    villageCenter,
+                    mainRoadEnd,
+                    waterHeight,
+                    -1,
+                    villageRoadHeights
+                );
+
+                for (
+                    int branchIndex = 0;
+                    branchIndex < branchRoadStarts.Count;
+                    branchIndex++
+                )
+                {
+                    Vector2Int roadStart = branchRoadStarts[branchIndex];
+
+                    TerraformVillageRoad(
+                        blocks,
+                        surfaceHeights,
+                        riverInfluences,
+                        roadStart,
+                        roadStart,
+                        branchRoadEnds[branchIndex],
+                        waterHeight,
+                        villageRoadHeights[roadStart],
+                        villageRoadHeights
+                    );
+                }
+
+                for (
+                    int buildingIndex = 0;
+                    buildingIndex < buildingsToPlace;
+                    buildingIndex++
+                )
+                {
+                    int roadHeight = villageRoadHeights[
+                        buildingServicePoints[buildingIndex]
+                    ];
+                    int minimumBaseHeight = GetVillageBuildingMinimumBaseHeight(
+                        surfaceHeights,
+                        buildingTemplates[buildingIndex],
+                        buildingOrigins[buildingIndex],
+                        buildingRotations[buildingIndex],
+                        roadHeight
+                    );
+                    buildingTargetYs.Add(
+                        Mathf.Clamp(
+                            Mathf.Max(roadHeight, minimumBaseHeight),
+                            0,
+                            ChunkHeight -
+                                buildingTemplates[buildingIndex].Height -
+                                1
+                        )
+                    );
+                }
+            }
+
+            for (int buildingIndex = 0; buildingIndex < buildingsToPlace; buildingIndex++)
+            {
+                int rotation = buildingRotations[buildingIndex];
+                VillageBuildingTemplate buildingTemplate =
+                    buildingTemplates[buildingIndex];
+                Vector2Int origin = buildingOrigins[buildingIndex];
+
+                PrepareVillageBuildingFoundation(
+                    blocks,
+                    buildingTemplate,
+                    origin,
+                    buildingTargetYs[buildingIndex],
+                    rotation
+                );
+                PlaceVillageBuilding(
+                    blocks,
+                    buildingTemplate,
+                    origin,
+                    buildingTargetYs[buildingIndex],
+                    rotation
+                );
+            }
+        }
+
+        for (int x = 0; x < ChunkWidth; x++)
+        {
+            for (int z = 0; z < ChunkWidth; z++)
+            {
+                for (int y = ChunkHeight - 1; y >= 0; y--)
+                {
+                    if (
+                        blocks[x, y, z] == BlockType.Dirt &&
+                        y >= waterHeight &&
+                        (
+                            y == ChunkHeight - 1 ||
+                            blocks[x, y + 1, z] == BlockType.Air
+                        )
+                    )
+                    {
+                        blocks[x, y, z] = BlockType.Grass;
+                    }
                 }
             }
         }
@@ -534,10 +944,557 @@ public class ChunkTerrainGenerator : MonoBehaviour
         return blocks;
     }
 
+    private static Vector2Int RotateVillageTemplateCoordinate(
+        int localX,
+        int localZ,
+        int rotation,
+        int templateWidth,
+        int templateDepth
+    )
+    {
+        switch (rotation & 3)
+        {
+            case 0:
+                return new Vector2Int(localX, localZ);
+            case 1:
+                return new Vector2Int(templateDepth - 1 - localZ, localX);
+            case 2:
+                return new Vector2Int(
+                    templateWidth - 1 - localX,
+                    templateDepth - 1 - localZ
+                );
+            default:
+                return new Vector2Int(localZ, templateWidth - 1 - localX);
+        }
+    }
+
+    private static bool TryPlanVillageBuilding(
+        Vector2Int servicePoint,
+        Vector2Int outwardDirection,
+        VillageBuildingTemplate buildingTemplate,
+        int chunkWidth,
+        int buildingSpacing,
+        int[,] surfaceHeights,
+        float[,] riverInfluences,
+        int waterHeight,
+        List<Vector2Int> buildingOrigins,
+        List<Vector2Int> buildingServicePoints,
+        List<int> buildingRotations,
+        List<VillageBuildingTemplate> buildingTemplates,
+        List<BoundsInt> buildingFootprints
+    )
+    {
+        int rotation;
+
+        if (outwardDirection == Vector2Int.down)
+        {
+            rotation = 0;
+        }
+        else if (outwardDirection == Vector2Int.right)
+        {
+            rotation = 1;
+        }
+        else if (outwardDirection == Vector2Int.up)
+        {
+            rotation = 2;
+        }
+        else
+        {
+            rotation = 3;
+        }
+
+        Vector2Int entrance = servicePoint - outwardDirection * 3;
+        Vector2Int rotatedDoor = RotateVillageTemplateCoordinate(
+            buildingTemplate.Width / 2,
+            0,
+            rotation,
+            buildingTemplate.Width,
+            buildingTemplate.Depth
+        );
+        Vector2Int buildingOrigin = entrance - rotatedDoor;
+        int rotatedWidth = rotation % 2 == 0 ?
+            buildingTemplate.Width :
+            buildingTemplate.Depth;
+        int rotatedDepth = rotation % 2 == 0 ?
+            buildingTemplate.Depth :
+            buildingTemplate.Width;
+        BoundsInt buildingFootprint = new BoundsInt(
+            buildingOrigin.x,
+            0,
+            buildingOrigin.y,
+            rotatedWidth,
+            1,
+            rotatedDepth
+        );
+
+        if (
+            buildingFootprint.xMin < 0 ||
+            buildingFootprint.xMax > chunkWidth ||
+            buildingFootprint.zMin < 0 ||
+            buildingFootprint.zMax > chunkWidth
+        )
+        {
+            return false;
+        }
+
+        for (int x = buildingFootprint.xMin; x < buildingFootprint.xMax; x++)
+        {
+            for (int z = buildingFootprint.zMin; z < buildingFootprint.zMax; z++)
+            {
+                if (
+                    surfaceHeights[x, z] < waterHeight ||
+                    riverInfluences[x, z] > 0.5f
+                )
+                {
+                    return false;
+                }
+            }
+        }
+
+        for (
+            int footprintIndex = 0;
+            footprintIndex < buildingFootprints.Count;
+            footprintIndex++
+        )
+        {
+            BoundsInt existingFootprint = buildingFootprints[footprintIndex];
+
+            if (
+                buildingFootprint.xMin <
+                    existingFootprint.xMax + buildingSpacing &&
+                buildingFootprint.xMax + buildingSpacing >
+                    existingFootprint.xMin &&
+                buildingFootprint.zMin <
+                    existingFootprint.zMax + buildingSpacing &&
+                buildingFootprint.zMax + buildingSpacing >
+                    existingFootprint.zMin
+            )
+            {
+                return false;
+            }
+        }
+
+        buildingOrigins.Add(buildingOrigin);
+        buildingServicePoints.Add(servicePoint);
+        buildingRotations.Add(rotation);
+        buildingTemplates.Add(buildingTemplate);
+        buildingFootprints.Add(buildingFootprint);
+        return true;
+    }
+
+    private static int GetVillageBuildingMinimumBaseHeight(
+        int[,] surfaceHeights,
+        VillageBuildingTemplate buildingTemplate,
+        Vector2Int origin,
+        int rotation,
+        int fallbackHeight
+    )
+    {
+        int minimumBaseHeight = int.MaxValue;
+
+        for (int localZ = 0; localZ < buildingTemplate.Depth; localZ++)
+        {
+            for (int localX = 0; localX < buildingTemplate.Width; localX++)
+            {
+                VillageBuildingCell floorCell =
+                    buildingTemplate.GetCell(localX, 0, localZ);
+
+                if (
+                    !floorCell.ReplacesBlock ||
+                    floorCell.Block == BlockType.Air
+                )
+                {
+                    continue;
+                }
+
+                Vector2Int rotatedCoordinate = RotateVillageTemplateCoordinate(
+                    localX,
+                    localZ,
+                    rotation,
+                    buildingTemplate.Width,
+                    buildingTemplate.Depth
+                );
+                int worldX = origin.x + rotatedCoordinate.x;
+                int worldZ = origin.y + rotatedCoordinate.y;
+                minimumBaseHeight = Mathf.Min(
+                    minimumBaseHeight,
+                    surfaceHeights[worldX, worldZ]
+                );
+            }
+        }
+
+        return minimumBaseHeight == int.MaxValue ?
+            fallbackHeight :
+            minimumBaseHeight;
+    }
+
+    private static void PrepareVillageBuildingFoundation(
+        BlockType[,,] blocks,
+        VillageBuildingTemplate buildingTemplate,
+        Vector2Int origin,
+        int baseY,
+        int rotation
+    )
+    {
+        for (int localZ = 0; localZ < buildingTemplate.Depth; localZ++)
+        {
+            for (int localX = 0; localX < buildingTemplate.Width; localX++)
+            {
+                VillageBuildingCell floorCell =
+                    buildingTemplate.GetCell(localX, 0, localZ);
+
+                if (!floorCell.ReplacesBlock)
+                {
+                    continue;
+                }
+
+                Vector2Int rotatedCoordinate = RotateVillageTemplateCoordinate(
+                    localX,
+                    localZ,
+                    rotation,
+                    buildingTemplate.Width,
+                    buildingTemplate.Depth
+                );
+                int worldX = origin.x + rotatedCoordinate.x;
+                int worldZ = origin.y + rotatedCoordinate.y;
+
+                if (
+                    worldX < 0 || worldX >= blocks.GetLength(0) ||
+                    worldZ < 0 || worldZ >= blocks.GetLength(2)
+                )
+                {
+                    continue;
+                }
+
+                if (floorCell.Block == BlockType.Air)
+                {
+                    continue;
+                }
+
+                for (int y = baseY - 1; y >= 0; y--)
+                {
+                    if (blocks[worldX, y, worldZ] != BlockType.Air)
+                    {
+                        break;
+                    }
+
+                    blocks[worldX, y, worldZ] = BlockType.Dirt;
+                }
+            }
+        }
+    }
+
+    private static int TerraformVillageRoad(
+        BlockType[,,] blocks,
+        int[,] surfaceHeights,
+        float[,] riverInfluences,
+        Vector2Int start,
+        Vector2Int corner,
+        Vector2Int end,
+        int waterHeight,
+        int forcedStartHeight,
+        Dictionary<Vector2Int, int> generatedCenterlineHeights
+    )
+    {
+        List<Vector2Int> centerline = new List<Vector2Int>();
+        AppendVillageRoadSegment(centerline, start, corner, true);
+        AppendVillageRoadSegment(centerline, corner, end, false);
+
+        int[] roadHeights = new int[centerline.Count];
+        bool[] waterLevelAnchors = new bool[centerline.Count];
+
+        for (int pointIndex = 0; pointIndex < centerline.Count; pointIndex++)
+        {
+            Vector2Int point = centerline[pointIndex];
+            int sampleX = Mathf.Clamp(point.x, 0, blocks.GetLength(0) - 1);
+            int sampleZ = Mathf.Clamp(point.y, 0, blocks.GetLength(2) - 1);
+            int targetHeight = surfaceHeights[sampleX, sampleZ];
+
+            if (
+                riverInfluences[sampleX, sampleZ] > 0.5f &&
+                surfaceHeights[sampleX, sampleZ] < waterHeight
+            )
+            {
+                targetHeight = waterHeight;
+                waterLevelAnchors[pointIndex] = true;
+            }
+
+            roadHeights[pointIndex] = targetHeight;
+        }
+
+        for (int anchorIndex = 0; anchorIndex < roadHeights.Length; anchorIndex++)
+        {
+            if (!waterLevelAnchors[anchorIndex])
+            {
+                continue;
+            }
+
+            for (int pointIndex = 0; pointIndex < roadHeights.Length; pointIndex++)
+            {
+                roadHeights[pointIndex] = Mathf.Min(
+                    roadHeights[pointIndex],
+                    waterHeight + Mathf.Abs(pointIndex - anchorIndex)
+                );
+            }
+        }
+
+        if (forcedStartHeight >= 0)
+        {
+            roadHeights[0] = Mathf.Clamp(
+                forcedStartHeight,
+                0,
+                blocks.GetLength(1) - 1
+            );
+        }
+
+        for (int pointIndex = 1; pointIndex < roadHeights.Length; pointIndex++)
+        {
+            roadHeights[pointIndex] = Mathf.Clamp(
+                roadHeights[pointIndex],
+                roadHeights[pointIndex - 1] - 1,
+                roadHeights[pointIndex - 1] + 1
+            );
+        }
+
+        if (forcedStartHeight < 0)
+        {
+            for (
+                int pointIndex = roadHeights.Length - 2;
+                pointIndex >= 0;
+                pointIndex--
+            )
+            {
+                roadHeights[pointIndex] = Mathf.Clamp(
+                    roadHeights[pointIndex],
+                    roadHeights[pointIndex + 1] - 1,
+                    roadHeights[pointIndex + 1] + 1
+                );
+            }
+        }
+
+        int halfWidth = VillageRoadWidth / 2;
+
+        for (int pointIndex = 0; pointIndex < centerline.Count; pointIndex++)
+        {
+            Vector2Int point = centerline[pointIndex];
+
+            if (generatedCenterlineHeights != null)
+            {
+                generatedCenterlineHeights[point] = roadHeights[pointIndex];
+            }
+
+            for (int offsetX = -halfWidth; offsetX <= halfWidth; offsetX++)
+            {
+                for (int offsetZ = -halfWidth; offsetZ <= halfWidth; offsetZ++)
+                {
+                    TerraformVillageRoadColumn(
+                        blocks,
+                        surfaceHeights,
+                        riverInfluences,
+                        point.x + offsetX,
+                        point.y + offsetZ,
+                        roadHeights[pointIndex]
+                    );
+                }
+            }
+        }
+
+        return roadHeights[roadHeights.Length - 1];
+    }
+
+    private static void AppendVillageRoadSegment(
+        List<Vector2Int> centerline,
+        Vector2Int start,
+        Vector2Int end,
+        bool includeStart
+    )
+    {
+        int deltaX = System.Math.Sign(end.x - start.x);
+        int deltaZ = System.Math.Sign(end.y - start.y);
+        int stepCount = Mathf.Max(
+            Mathf.Abs(end.x - start.x),
+            Mathf.Abs(end.y - start.y)
+        );
+        int firstStep = includeStart ? 0 : 1;
+
+        for (int step = firstStep; step <= stepCount; step++)
+        {
+            centerline.Add(
+                new Vector2Int(
+                    start.x + deltaX * step,
+                    start.y + deltaZ * step
+                )
+            );
+        }
+    }
+
+    private static void TerraformVillageRoadColumn(
+        BlockType[,,] blocks,
+        int[,] surfaceHeights,
+        float[,] riverInfluences,
+        int x,
+        int z,
+        int roadY
+    )
+    {
+        if (
+            x < 0 || x >= blocks.GetLength(0) ||
+            z < 0 || z >= blocks.GetLength(2)
+        )
+        {
+            return;
+        }
+
+        roadY = Mathf.Clamp(roadY, 0, blocks.GetLength(1) - 1);
+        bool isUnsupportedRiverCrossing =
+            riverInfluences[x, z] > 0.5f &&
+            surfaceHeights[x, z] < roadY;
+
+        for (int y = roadY + 1; y < blocks.GetLength(1); y++)
+        {
+            blocks[x, y, z] = BlockType.Air;
+        }
+
+        if (!isUnsupportedRiverCrossing)
+        {
+            for (
+                int y = Mathf.Max(0, roadY - VillageFoundationDepth);
+                y < roadY;
+                y++
+            )
+            {
+                if (blocks[x, y, z] == BlockType.Air)
+                {
+                    blocks[x, y, z] = BlockType.Stone;
+                }
+            }
+        }
+
+        blocks[x, roadY, z] =
+            isUnsupportedRiverCrossing ?
+            BlockType.WoodPlank :
+            BlockType.Path;
+    }
+
+    private static void PlaceVillageBuilding(
+        BlockType[,,] blocks,
+        VillageBuildingTemplate buildingTemplate,
+        Vector2Int origin,
+        int baseY,
+        int rotation
+    )
+    {
+        for (int localY = 0; localY < buildingTemplate.Height; localY++)
+        {
+            int worldY = baseY + localY;
+
+            if (worldY < 0 || worldY >= blocks.GetLength(1))
+            {
+                continue;
+            }
+
+            for (int localZ = 0; localZ < buildingTemplate.Depth; localZ++)
+            {
+                for (int localX = 0; localX < buildingTemplate.Width; localX++)
+                {
+                    VillageBuildingCell buildingCell =
+                        buildingTemplate.GetCell(localX, localY, localZ);
+
+                    if (!buildingCell.ReplacesBlock)
+                    {
+                        continue;
+                    }
+
+                    Vector2Int rotatedCoordinate = RotateVillageTemplateCoordinate(
+                        localX,
+                        localZ,
+                        rotation,
+                        buildingTemplate.Width,
+                        buildingTemplate.Depth
+                    );
+                    int worldX = origin.x + rotatedCoordinate.x;
+                    int worldZ = origin.y + rotatedCoordinate.y;
+
+                    if (
+                        worldX < 0 || worldX >= blocks.GetLength(0) ||
+                        worldZ < 0 || worldZ >= blocks.GetLength(2)
+                    )
+                    {
+                        continue;
+                    }
+
+                    blocks[worldX, worldY, worldZ] = buildingCell.Block;
+                }
+            }
+        }
+    }
+
+    private static void BuildDungeonRoom(
+        BlockType[,,] blocks,
+        BoundsInt room,
+        int floorY,
+        System.Random mossRandom,
+        float mossChance
+    )
+    {
+        int roomStartX = Mathf.Max(0, room.xMin);
+        int roomEndX = Mathf.Min(blocks.GetLength(0), room.xMax);
+        int roomStartZ = Mathf.Max(0, room.zMin);
+        int roomEndZ = Mathf.Min(blocks.GetLength(2), room.zMax);
+        int roofY = Mathf.Min(
+            floorY + DungeonRoomHeight + 1,
+            blocks.GetLength(1) - 1
+        );
+
+        for (int x = roomStartX; x < roomEndX; x++)
+        {
+            for (int z = roomStartZ; z < roomEndZ; z++)
+            {
+                for (int y = floorY; y <= roofY; y++)
+                {
+                    bool isRoomShell =
+                        y == floorY ||
+                        y == roofY ||
+                        x == room.xMin ||
+                        x == room.xMax - 1 ||
+                        z == room.zMin ||
+                        z == room.zMax - 1;
+
+                    if (isRoomShell)
+                    {
+                        bool isUnsupportedFloor =
+                            y == floorY &&
+                            floorY > 0 &&
+                            blocks[x, floorY - 1, z] == BlockType.Air;
+
+                        if (isUnsupportedFloor)
+                        {
+                            blocks[x, y, z] = BlockType.WoodPlank;
+                        }
+                        else
+                        {
+                            blocks[x, y, z] =
+                                mossRandom.NextDouble() < mossChance ?
+                                BlockType.MossyStoneBrick :
+                                BlockType.StoneBrick;
+                        }
+                    }
+                    else
+                    {
+                        blocks[x, y, z] = BlockType.Air;
+                    }
+                }
+            }
+        }
+    }
+
     private static void CarveDungeonCorridor(
         BlockType[,,] blocks,
         Vector3Int start,
-        Vector3Int end
+        Vector3Int end,
+        List<BoundsInt> dungeonRooms,
+        System.Random mossRandom,
+        float mossChance
     )
     {
         int halfWidth = DungeonCorridorWidth / 2;
@@ -566,15 +1523,48 @@ public class ChunkTerrainGenerator : MonoBehaviour
         minimumZ = Mathf.Max(0, minimumZ);
         maximumZ = Mathf.Min(blocks.GetLength(2), maximumZ);
         int floorY = Mathf.Clamp(start.y, 0, blocks.GetLength(1) - 1);
-        int ceilingY = Mathf.Min(floorY + DungeonRoomHeight, blocks.GetLength(1) - 1);
+        int ceilingY = Mathf.Min(
+            floorY + DungeonCorridorHeight,
+            blocks.GetLength(1) - 1
+        );
 
         for (int x = minimumX; x < maximumX; x++)
         {
             for (int z = minimumZ; z < maximumZ; z++)
             {
-                if (blocks[x, floorY, z] == BlockType.Air)
+                bool insideDungeonRoom = false;
+
+                for (int roomIndex = 0; roomIndex < dungeonRooms.Count; roomIndex++)
                 {
-                    blocks[x, floorY, z] = BlockType.WoodPlank;
+                    BoundsInt room = dungeonRooms[roomIndex];
+
+                    if (
+                        x >= room.xMin && x < room.xMax &&
+                        z >= room.zMin && z < room.zMax
+                    )
+                    {
+                        insideDungeonRoom = true;
+                        break;
+                    }
+                }
+
+                if (!insideDungeonRoom)
+                {
+                    bool isUnsupportedFloor =
+                        floorY > 0 &&
+                        blocks[x, floorY - 1, z] == BlockType.Air;
+
+                    if (isUnsupportedFloor)
+                    {
+                        blocks[x, floorY, z] = BlockType.WoodPlank;
+                    }
+                    else
+                    {
+                        blocks[x, floorY, z] =
+                            mossRandom.NextDouble() < mossChance ?
+                            BlockType.MossyStoneBrick :
+                            BlockType.StoneBrick;
+                    }
                 }
 
                 for (int y = floorY + 1; y <= ceilingY; y++)

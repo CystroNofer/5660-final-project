@@ -315,7 +315,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChunkTerrainGenerator
   ChunkWidth: 128
-  seed: 967
+  seed: 1649685
   baseTerrainHeight: 80
   terrainAmplitudeDirt: 20
   terrainAmplitudeStone: 20
@@ -342,6 +342,11 @@ MonoBehaviour:
   generateDungeon: 1
   dungeonRoomCount: 8
   dungeonFloorY: 40
+  dungeonMossBrickChance: 0.15
+  generateVillage: 1
+  villageBuildingCount: 8
+  villageCandidateCount: 24
+  villageBuildingSpacing: 2
   waterPrefab: {fileID: 1879239314502673702, guid: 02605892aa925a44da238efe54c4ab52, type: 3}
   waterHeight: 90
 --- !u!1 &1822919560
